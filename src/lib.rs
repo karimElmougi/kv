@@ -46,6 +46,7 @@ impl<T> Store<T>
 where
     T: Serialize + for<'a> Deserialize<'a>,
 {
+    /// Opens the database at the given path.
     pub fn open(path: &Path) -> io::Result<Self> {
         let file = File::options()
             .read(true)
@@ -62,61 +63,68 @@ where
         Ok(Store(Arc::new(Mutex::new(inner))))
     }
 
-    pub fn set(&self, key: &str, data: &T) -> Result<(), Error> {
+    /// Sets the given key to the given value.
+    pub fn set(&self, key: &str, value: &T) -> Result<(), Error> {
         let key = validate_key(key)?;
-        let mut inner = self.0.lock();
-        let data = serde_json::to_string(&Some(data)).map_err(write_err)?;
-        writeln!(inner.file, "{key},{data}").map_err(write_err)
+        self.write(key, Some(value))
     }
 
+    /// Sets the given key to `None`.
+    ///
+    /// This appends `key,null` to the database, which in effect removes it from the database. 
+    /// Previous entries are not deleted.
     pub fn unset(&self, key: &str) -> Result<(), Error> {
         let key = validate_key(key)?;
-        let mut inner = self.0.lock();
-        let data = serde_json::to_string(&Option::<T>::None).map_err(write_err)?;
-        writeln!(inner.file, "{key},{data}").map_err(write_err)
+        self.write(key, Option::None)
     }
 
+    fn write(&self, key: &str, value: Option<&T>) -> Result<(), Error> {
+        let value = serde_json::to_string(&value).map_err(write_err)?;
+        writeln!(self.0.lock().file, "{key},{value}").map_err(write_err)
+    }
+
+    /// Retrieves the value associated with a key.
     pub fn get(&self, key: &str) -> Result<Option<T>, Error> {
         let key = validate_key(key)?;
-
-        let mut inner = self.0.lock();
-        inner.file.rewind().map_err(read_err)?;
-
-        let mut value = None;
-
-        let reader = io::BufReader::new(&inner.file);
-        for (line_number, line) in reader.lines().enumerate() {
-            let line = line.map_err(read_err)?;
-
-            let (k, v) = split_key_value(&line, line_number)?;
-
+        self.scan(move |k, v, value: &mut Option<T>| {
             if k == key {
-                value = serde_json::from_str(v).map_err(read_err)?;
+                *value = serde_json::from_str(v).map_err(read_err)?;
             }
-        }
-
-        Ok(value)
+            Ok(())
+        })
     }
 
+    /// Loads the entire database in memory in the form of a hash map.
     pub fn to_map(&self) -> Result<FxHashMap<String, T>, Error> {
-        let mut inner = self.0.lock();
-        inner.file.rewind().map_err(read_err)?;
-
-        let mut map = FxHashMap::default();
-
-        let reader = io::BufReader::new(&inner.file);
-        for (line_number, line) in reader.lines().enumerate() {
-            let line = line.map_err(read_err)?;
-
-            let (k, v) = split_key_value(&line, line_number)?;
+        self.scan(|k, v, map: &mut FxHashMap<String, T>| {
             let v: Option<T> = serde_json::from_str(v).map_err(read_err)?;
-
             if let Some(v) = v {
                 map.insert(k.to_string(), v);
             }
+            Ok(())
+        })
+    }
+
+    /// Scans the database and calls the given function for every line.
+    fn scan<Output, F>(&self, f: F) -> Result<Output, Error>
+    where
+        Output: Default,
+        F: Fn(&str, &str, &mut Output) -> Result<(), Error>,
+    {
+        let mut inner = self.0.lock();
+        inner.file.rewind().map_err(read_err)?;
+
+        let mut output = Output::default();
+
+        let reader = io::BufReader::new(&inner.file);
+        for (line_number, line) in reader.lines().enumerate() {
+            let line = line.map_err(read_err)?;
+
+            let (k, v) = split_key_value(&line, line_number)?;
+            f(k, v, &mut output)?;
         }
 
-        Ok(map)
+        Ok(output)
     }
 }
 

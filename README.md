@@ -5,7 +5,16 @@ A dead-simple key-value store.
 ## Data Format
 
 Key-value pairs are simply appended to a file in a CSV scheme, with the value being a JSON serialization of whatever datatype is being stored.
-This means that any tooling that works on CSV files can be used to inspect or modify the database transparently.
+
+Example:
+```csv
+some key,"This is a string"
+another key,5
+null key,null
+some key,{ "this": "is", "a": "json object" }
+```
+
+This means that any tooling that works on CSV files (or regular files) can be used to inspect or modify the database transparently.
 Indeed, while `kv` provides a CLI tool for handling the data, one can query the database with just base shell commands like so:
 ```sh
 grep '^some_key,' | tail -n 1 | sd '^.+,(.+)' '$1' | jq
