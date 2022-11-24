@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
@@ -6,7 +6,7 @@ use clap::{Parser, Subcommand};
 #[command(version, about, long_about = None)]
 #[command(propagate_version = true)]
 struct Cli {
-    db_name: String,
+    db_path: PathBuf,
 
     #[command(subcommand)]
     command: Command,
@@ -22,10 +22,14 @@ enum Command {
 fn main() -> Result<(), kv::Error> {
     let cli = Cli::parse();
 
-    let store = kv::Store::<String>::open(Path::new(&format!("{}.db", cli.db_name))).unwrap();
+    let store = kv::Store::<serde_json::Value>::open(&cli.db_path).unwrap();
 
     match cli.command {
-        Command::Set { key, value } => store.set(&key, &value)?,
+        Command::Set { key, value } => {
+            let value =
+                serde_json::from_str(&value).map_err(|err| kv::Error::Write(err.to_string()))?;
+            store.set(&key, &value)?
+        }
         Command::Unset { key } => store.unset(&key)?,
         Command::Get { key } => {
             let value = store.get(&key)?;
