@@ -139,7 +139,7 @@ fn split_key_value(line: &str, line_number: usize) -> Result<(&str, &str), Error
 fn validate_key(key: &str) -> Result<&str, Error> {
     if key
         .chars()
-        .all(|c| matches!(c, '0'..='9' | 'A'..='Z' | 'a'..='z' | ' ' | ':' | '/'))
+        .all(|c| matches!(c, '0'..='9' | 'A'..='Z' | 'a'..='z' | ' ' | ':' | '/' | '.'))
     {
         Ok(key)
     } else {
