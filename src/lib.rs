@@ -12,10 +12,10 @@ use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum Error {
-    #[error("Unable to write record: {0}")]
+    #[error("Unable to read record: {0}")]
     Read(String),
 
-    #[error("Unable to read record: {0}")]
+    #[error("Unable to write record: {0}")]
     Write(String),
 
     #[error("Key `{0}` contains invalid characters")]
@@ -95,7 +95,7 @@ where
     }
 
     /// Loads the entire database in memory in the form of a hash map.
-    pub fn to_map(&self) -> Result<FxHashMap<String, T>, Error> {
+    pub fn load_map(&self) -> Result<FxHashMap<String, T>, Error> {
         self.scan(|k, v, map: &mut FxHashMap<String, T>| {
             let v: Option<T> = serde_json::from_str(v).map_err(read_err)?;
             if let Some(v) = v {
@@ -139,7 +139,7 @@ fn split_key_value(line: &str, line_number: usize) -> Result<(&str, &str), Error
 fn validate_key(key: &str) -> Result<&str, Error> {
     if key
         .chars()
-        .all(|c| matches!(c, '0'..='9' | 'A'..='Z' | 'a'..='z' | ' '))
+        .all(|c| matches!(c, '0'..='9' | 'A'..='Z' | 'a'..='z' | ' ' | ':' | '/'))
     {
         Ok(key)
     } else {
@@ -170,7 +170,7 @@ mod tests {
             map.insert(key, value);
         }
 
-        let store = store.to_map().unwrap();
+        let store = store.load_map().unwrap();
         for (key, value) in map {
             assert_eq!(value, *store.get(&key).unwrap());
         }
