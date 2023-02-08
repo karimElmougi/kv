@@ -71,7 +71,7 @@ where
 
     /// Sets the given key to `None`.
     ///
-    /// This appends `key,null` to the database, which in effect removes it from the database. 
+    /// This appends `key,null` to the database, which in effect removes it from the database.
     /// Previous entries are not deleted.
     pub fn unset(&self, key: &str) -> Result<(), Error> {
         let key = validate_key(key)?;
@@ -129,7 +129,7 @@ where
 }
 
 fn split_key_value(line: &str, line_number: usize) -> Result<(&str, &str), Error> {
-    let mut split = line.split(',');
+    let mut split = line.splitn(2, ',');
     let k = split.next().ok_or_else(|| line_error(line_number, line))?;
     let v = split.next().ok_or_else(|| line_error(line_number, line))?;
 
@@ -183,5 +183,11 @@ mod tests {
         assert_eq!(Ok("key with spaces"), validate_key("key with spaces"));
         assert!(validate_key("this,is,a,bad,key").is_err());
         assert!(validate_key("this is\nalso bad").is_err());
+    }
+
+    #[test]
+    fn separator_test() {
+        assert_eq!(Ok(("a", "b")), split_key_value("a,b", 0));
+        assert_eq!(Ok(("a", "b,c")), split_key_value("a,b,c", 0));
     }
 }
