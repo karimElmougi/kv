@@ -72,6 +72,17 @@ impl<T> Store<T> {
         writeln!(self.0.lock().file, "{key},{value}").map_err(write_err)
     }
 
+    /// Searches the database for an instance of the given key.
+    pub fn contains(&self, key: &str) -> Result<bool, Error> {
+        let key = validate_key(key)?;
+        self.scan(move |k, v, contains: &mut bool| {
+            if k == key {
+                *contains = v != "null";
+            }
+            Ok(())
+        })
+    }
+
     /// Scans the database and calls the given function for every line.
     fn scan<Output, F>(&self, f: F) -> Result<Output, Error>
     where
@@ -192,5 +203,15 @@ mod tests {
     fn separator_test() {
         assert_eq!(Ok(("a", "b")), split_key_value("a,b", 0));
         assert_eq!(Ok(("a", "b,c")), split_key_value("a,b,c", 0));
+    }
+
+    #[test]
+    fn unset() {
+        let f = NamedTempFile::new().unwrap();
+        let store = Store::<String>::open(f.path()).unwrap();
+        store.set("key", &"hello".to_string()).unwrap();
+        assert!(store.contains("key").unwrap());
+        store.unset("key").unwrap();
+        assert!(!store.contains("key").unwrap());
     }
 }
