@@ -42,10 +42,7 @@ struct StoreInner<T> {
     _phantom: PhantomData<T>,
 }
 
-impl<T> Store<T>
-where
-    T: Serialize + for<'a> Deserialize<'a>,
-{
+impl<T> Store<T> {
     /// Opens the database at the given path.
     pub fn open(path: &Path) -> io::Result<Self> {
         let file = File::options()
@@ -63,46 +60,16 @@ where
         Ok(Store(Arc::new(Mutex::new(inner))))
     }
 
-    /// Sets the given key to the given value.
-    pub fn set(&self, key: &str, value: &T) -> Result<(), Error> {
-        let key = validate_key(key)?;
-        self.write(key, Some(value))
-    }
-
     /// Sets the given key to `None`.
     ///
     /// This appends `key,null` to the database, which in effect removes it from the database.
     /// Previous entries are not deleted.
     pub fn unset(&self, key: &str) -> Result<(), Error> {
         let key = validate_key(key)?;
-        self.write(key, Option::None)
-    }
-
-    fn write(&self, key: &str, value: Option<&T>) -> Result<(), Error> {
-        let value = serde_json::to_string(&value).map_err(write_err)?;
+        // The type for the Option doesn't matter since we write None. This lets us call `unset` in
+        // generic contexts without having to specify `Serialize`.
+        let value = serde_json::to_string(&Option::<u8>::None).map_err(write_err)?;
         writeln!(self.0.lock().file, "{key},{value}").map_err(write_err)
-    }
-
-    /// Retrieves the value associated with a key.
-    pub fn get(&self, key: &str) -> Result<Option<T>, Error> {
-        let key = validate_key(key)?;
-        self.scan(move |k, v, value: &mut Option<T>| {
-            if k == key {
-                *value = serde_json::from_str(v).map_err(read_err)?;
-            }
-            Ok(())
-        })
-    }
-
-    /// Loads the entire database in memory in the form of a hash map.
-    pub fn load_map(&self) -> Result<FxHashMap<String, T>, Error> {
-        self.scan(|k, v, map: &mut FxHashMap<String, T>| {
-            let v: Option<T> = serde_json::from_str(v).map_err(read_err)?;
-            if let Some(v) = v {
-                map.insert(k.to_string(), v);
-            }
-            Ok(())
-        })
     }
 
     /// Scans the database and calls the given function for every line.
@@ -125,6 +92,42 @@ where
         }
 
         Ok(output)
+    }
+}
+
+impl<T: Serialize> Store<T> {
+    /// Sets the given key to the given value.
+    pub fn set(&self, key: &str, value: &T) -> Result<(), Error> {
+        let key = validate_key(key)?;
+        let value = serde_json::to_string(&Some(value)).map_err(write_err)?;
+        writeln!(self.0.lock().file, "{key},{value}").map_err(write_err)
+    }
+}
+
+impl<T> Store<T>
+where
+    T: for<'a> Deserialize<'a>,
+{
+    /// Retrieves the value associated with a key.
+    pub fn get(&self, key: &str) -> Result<Option<T>, Error> {
+        let key = validate_key(key)?;
+        self.scan(move |k, v, value: &mut Option<T>| {
+            if k == key {
+                *value = serde_json::from_str(v).map_err(read_err)?;
+            }
+            Ok(())
+        })
+    }
+
+    /// Loads the entire database in memory in the form of a hash map.
+    pub fn load_map(&self) -> Result<FxHashMap<String, T>, Error> {
+        self.scan(|k, v, map: &mut FxHashMap<String, T>| {
+            let v: Option<T> = serde_json::from_str(v).map_err(read_err)?;
+            if let Some(v) = v {
+                map.insert(k.to_string(), v);
+            }
+            Ok(())
+        })
     }
 }
 
