@@ -34,8 +34,13 @@ fn line_error(line_number: usize, line: &str) -> Error {
     Error::Read(format!("Invalid data as line {line_number}: `{line}`"))
 }
 
-#[derive(Clone)]
 pub struct Store<T>(Arc<Mutex<StoreInner<T>>>);
+
+impl<T> Clone for Store<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
 
 struct StoreInner<T> {
     file: File,
