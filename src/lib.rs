@@ -139,9 +139,10 @@ where
     pub fn load_map(&self) -> Result<FxHashMap<String, T>, Error> {
         self.scan(|k, v, map: &mut FxHashMap<String, T>| {
             let v: Option<T> = serde_json::from_str(v).map_err(read_err)?;
-            if let Some(v) = v {
-                map.insert(k.to_string(), v);
-            }
+            match v {
+                Some(v) => map.insert(k.to_string(), v),
+                None => map.remove(k),
+            };
             Ok(())
         })
     }
