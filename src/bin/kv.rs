@@ -17,6 +17,7 @@ enum Command {
     Set { key: String, value: String },
     Unset { key: String },
     Get { key: String },
+    Load,
 }
 
 fn main() -> Result<(), kv::Error> {
@@ -34,6 +35,10 @@ fn main() -> Result<(), kv::Error> {
         Command::Get { key } => {
             let value = store.get(&key)?;
             println!("{}", value.unwrap_or_default());
+        }
+        Command::Load => {
+            let map = store.load_map()?;
+            println!("{map:?}");
         }
     }
 
